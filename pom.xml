@@ -27,6 +27,8 @@
         <module>sqlite</module>
         <module>verification</module>
 <!--        <module>pi</module>-->
+        <module>mysql</module>
+        <module>postgresql</module>
     </modules>
 
     <properties>

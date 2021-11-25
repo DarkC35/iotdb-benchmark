@@ -90,4 +90,7 @@ public class Constants {
   public static final String SQLITE_CLASS = "cn.edu.tsinghua.iotdb.benchmark.sqlite.SqliteDB";
   public static final String PI_ARCHIVE_CLASS =
       "cn.edu.tsinghua.iotdb.benchmark.piarchive.PIArchive";
+  public static final String MYSQL_CLASS = "cn.edu.tsinghua.iotdb.benchmark.mysql.MySQL";
+  public static final String POSTGRESQL_CLASS =
+      "cn.edu.tsinghua.iotdb.benchmark.postgresql.PostgreSQL";
 }

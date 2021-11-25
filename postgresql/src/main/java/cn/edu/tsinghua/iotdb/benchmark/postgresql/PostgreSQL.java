@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package cn.edu.tsinghua.iotdb.benchmark.timescaledb;
+package cn.edu.tsinghua.iotdb.benchmark.postgresql;
 
 import cn.edu.tsinghua.iotdb.benchmark.client.operation.Operation;
 import cn.edu.tsinghua.iotdb.benchmark.conf.Config;
@@ -41,24 +41,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class TimescaleDB implements IDatabase {
+public class PostgreSQL implements IDatabase {
 
   private static Config config = ConfigDescriptor.getInstance().getConfig();
-  private static final Logger LOGGER = LoggerFactory.getLogger(TimescaleDB.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(PostgreSQL.class);
 
   private static final String POSTGRESQL_JDBC_NAME = "org.postgresql.Driver";
   private static final String POSTGRESQL_URL = "jdbc:postgresql://%s:%s/%s";
 
-  // chunk_time_interval=7d
-  private static final String CONVERT_TO_HYPERTABLE =
-      "SELECT create_hypertable('%s', 'time', chunk_time_interval => 604800000);";
   private static final String dropTable = "DROP TABLE %s;";
 
   private static String tableName;
   private Connection connection;
   private DBConfig dbConfig;
 
-  public TimescaleDB(DBConfig dbConfig) {
+  public PostgreSQL(DBConfig dbConfig) {
     this.dbConfig = dbConfig;
     tableName = dbConfig.getDB_NAME();
   }
@@ -78,7 +75,7 @@ public class TimescaleDB implements IDatabase {
               dbConfig.getUSERNAME(),
               dbConfig.getPASSWORD());
     } catch (Exception e) {
-      LOGGER.error("Initialize TimescaleDB failed because ", e);
+      LOGGER.error("Initialize PostgreSQL failed because ", e);
       throw new TsdbException(e);
     }
   }
@@ -104,7 +101,7 @@ public class TimescaleDB implements IDatabase {
     try {
       connection.close();
     } catch (Exception e) {
-      LOGGER.error("Failed to close TimeScaleDB connection because: {}", e.getMessage());
+      LOGGER.error("Failed to close PostgreSQL connection because: {}", e.getMessage());
       throw new TsdbException(e);
     }
   }
@@ -119,18 +116,14 @@ public class TimescaleDB implements IDatabase {
       String pgsql = getCreateTableSql(tableName, schemaList.get(0).getSensors());
       LOGGER.debug("CreateTableSQL Statement:  {}", pgsql);
       statement.execute(pgsql);
-      LOGGER.debug(
-          "CONVERT_TO_HYPERTABLE Statement:  {}", String.format(CONVERT_TO_HYPERTABLE, tableName));
-      statement.execute(String.format(CONVERT_TO_HYPERTABLE, tableName));
     } catch (SQLException e) {
-      LOGGER.error("Can't create PG table because: {}", e.getMessage());
+      LOGGER.error("Can't create PostgreSQL table because: {}", e.getMessage());
       throw new TsdbException(e);
     }
   }
 
   @Override
   public Status insertOneBatch(Batch batch) {
-    // original implementation
     // try (Statement statement = connection.createStatement()) {
     //   for (Record record : batch.getRecords()) {
     //     String sql =
@@ -145,8 +138,6 @@ public class TimescaleDB implements IDatabase {
     // } catch (Exception e) {
     //   return new Status(false, 0, e, e.toString());
     // }
-
-    // modified implementation based on postgresql implementation
     try (Statement statement = connection.createStatement()) {
       boolean first = true;
       StringBuilder builder = new StringBuilder();
@@ -311,7 +302,8 @@ public class TimescaleDB implements IDatabase {
 
   /**
    * eg. SELECT time_bucket(5000, time) AS sampleTime, device, count(s_2) FROM tutorial WHERE
-   * (device='d_2') AND (time >= 1535558400000 and time <= 1535558650000) GROUP BY time, device.
+   * (device='d_2') AND (time >= 1535558400000 and time <= 1535558650000) GROUP BY sampleTime,
+   * device.
    *
    * @param groupByQuery contains universal group by query condition parameters
    */
@@ -432,7 +424,7 @@ public class TimescaleDB implements IDatabase {
     StringBuilder sql = getSampleQuerySqlHead(deviceSchemas);
     sql.append(" ORDER BY time DESC");
     if (!config.isIS_QUIET_MODE()) {
-      LOGGER.info("TimescaleDB:" + sql);
+      LOGGER.info("PostgreSQL:" + sql);
     }
     Statement statement = connection.createStatement();
     ResultSet resultSet = statement.executeQuery(sql.toString());
@@ -502,11 +494,11 @@ public class TimescaleDB implements IDatabase {
     StringBuilder builder = new StringBuilder();
 
     builder
-        .append("SELECT time_bucket(")
+        .append("SELECT CAST((time / ")
         .append(timeUnit)
-        .append(", time, ")
-        .append(offset)
-        .append(") AS sampleTime");
+        .append(") as bigint) * ")
+        .append(timeUnit)
+        .append(" AS sampleTime");
 
     addFunSensor(aggFun, builder, devices.get(0).getSensors());
 
@@ -606,6 +598,7 @@ public class TimescaleDB implements IDatabase {
           .append(" NULL ");
     }
     sqlBuilder.append(",UNIQUE (time, sGroup, device));");
+    // sqlBuilder.append(");");
     return sqlBuilder.toString();
   }
 
@@ -617,6 +610,7 @@ public class TimescaleDB implements IDatabase {
    */
   private String getInsertOneBatchSql(
       DeviceSchema deviceSchema, long timestamp, List<Object> values) {
+    // todo: try https://www.postgresql.org/docs/current/populate.html
     StringBuilder builder = new StringBuilder();
     List<Sensor> sensors = deviceSchema.getSensors();
     builder.append("insert into ").append(tableName).append("(time, sGroup, device");
@@ -639,6 +633,7 @@ public class TimescaleDB implements IDatabase {
           .append("=excluded.")
           .append(sensors.get(i).getName());
     }
+    // builder.append(")");
     if (!config.isIS_QUIET_MODE()) {
       LOGGER.debug("getInsertOneBatchSql: {}", builder);
     }
@@ -664,11 +659,12 @@ public class TimescaleDB implements IDatabase {
     builder.append(",'").append(deviceSchema.getGroup()).append("'");
     builder.append(",'").append(deviceSchema.getDevice()).append("'");
     builder.append(",'").append(value).append("'");
-    builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
-    builder
-        .append(deviceSchema.getSensors().get(0))
-        .append("=excluded.")
-        .append(deviceSchema.getSensors().get(0));
+    // builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+    // builder
+    //     .append(deviceSchema.getSensors().get(0))
+    //     .append("=excluded.")
+    //     .append(deviceSchema.getSensors().get(0));
+    builder.append(")");
     if (!config.isIS_QUIET_MODE()) {
       LOGGER.debug("getInsertOneBatchSql: {}", builder);
     }

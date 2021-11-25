@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package cn.edu.tsinghua.iotdb.benchmark.timescaledb;
+package cn.edu.tsinghua.iotdb.benchmark.mysql;
 
 import cn.edu.tsinghua.iotdb.benchmark.client.operation.Operation;
 import cn.edu.tsinghua.iotdb.benchmark.conf.Config;
@@ -32,6 +32,7 @@ import cn.edu.tsinghua.iotdb.benchmark.tsdb.DBConfig;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.IDatabase;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.TsdbException;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.*;
+import com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,24 +42,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class TimescaleDB implements IDatabase {
+public class MySQL implements IDatabase {
 
   private static Config config = ConfigDescriptor.getInstance().getConfig();
-  private static final Logger LOGGER = LoggerFactory.getLogger(TimescaleDB.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(MySQL.class);
 
-  private static final String POSTGRESQL_JDBC_NAME = "org.postgresql.Driver";
-  private static final String POSTGRESQL_URL = "jdbc:postgresql://%s:%s/%s";
+  private static final String MYSQL_JDBC_NAME = "com.mysql.jdbc.Driver";
+  private static final String MYSQL_URL =
+      "jdbc:mysql://%s:%s/%s?user=%s&password=%s&useUnicode=true&characterEncoding=UTF8&useSSL=false&rewriteBatchedStatements=true";
 
   // chunk_time_interval=7d
-  private static final String CONVERT_TO_HYPERTABLE =
-      "SELECT create_hypertable('%s', 'time', chunk_time_interval => 604800000);";
+  // private static final String CONVERT_TO_HYPERTABLE =
+  //     "SELECT create_hypertable('%s', 'time', chunk_time_interval => 604800000);";
   private static final String dropTable = "DROP TABLE %s;";
 
   private static String tableName;
   private Connection connection;
   private DBConfig dbConfig;
 
-  public TimescaleDB(DBConfig dbConfig) {
+  public MySQL(DBConfig dbConfig) {
     this.dbConfig = dbConfig;
     tableName = dbConfig.getDB_NAME();
   }
@@ -66,19 +68,19 @@ public class TimescaleDB implements IDatabase {
   @Override
   public void init() throws TsdbException {
     try {
-      Class.forName(POSTGRESQL_JDBC_NAME);
-      // default username=postgres and password=postgres
+      Class.forName(MYSQL_JDBC_NAME);
+      // default username=mysql and password=mysql
       connection =
           DriverManager.getConnection(
               String.format(
-                  POSTGRESQL_URL,
+                  MYSQL_URL,
                   dbConfig.getHOST().get(0),
                   dbConfig.getPORT().get(0),
-                  dbConfig.getDB_NAME()),
-              dbConfig.getUSERNAME(),
-              dbConfig.getPASSWORD());
+                  dbConfig.getDB_NAME(),
+                  dbConfig.getUSERNAME(),
+                  dbConfig.getPASSWORD()));
     } catch (Exception e) {
-      LOGGER.error("Initialize TimescaleDB failed because ", e);
+      LOGGER.error("Initialize MySQL failed because ", e);
       throw new TsdbException(e);
     }
   }
@@ -104,7 +106,7 @@ public class TimescaleDB implements IDatabase {
     try {
       connection.close();
     } catch (Exception e) {
-      LOGGER.error("Failed to close TimeScaleDB connection because: {}", e.getMessage());
+      LOGGER.error("Failed to close MySQL connection because: {}", e.getMessage());
       throw new TsdbException(e);
     }
   }
@@ -116,47 +118,99 @@ public class TimescaleDB implements IDatabase {
   @Override
   public void registerSchema(List<DeviceSchema> schemaList) throws TsdbException {
     try (Statement statement = connection.createStatement()) {
-      String pgsql = getCreateTableSql(tableName, schemaList.get(0).getSensors());
-      LOGGER.debug("CreateTableSQL Statement:  {}", pgsql);
-      statement.execute(pgsql);
-      LOGGER.debug(
-          "CONVERT_TO_HYPERTABLE Statement:  {}", String.format(CONVERT_TO_HYPERTABLE, tableName));
-      statement.execute(String.format(CONVERT_TO_HYPERTABLE, tableName));
+      String sql = getCreateTableSql(tableName, schemaList.get(0).getSensors());
+      LOGGER.debug("CreateTableSQL Statement:  {}", sql);
+      statement.execute(sql);
     } catch (SQLException e) {
-      LOGGER.error("Can't create PG table because: {}", e.getMessage());
+      LOGGER.error("Can't create MySQL table because: {}", e.getMessage());
       throw new TsdbException(e);
     }
   }
 
   @Override
   public Status insertOneBatch(Batch batch) {
-    // original implementation
-    // try (Statement statement = connection.createStatement()) {
-    //   for (Record record : batch.getRecords()) {
-    //     String sql =
-    //         getInsertOneBatchSql(
-    //             batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
-    //     statement.addBatch(sql);
-    //   }
+    return insertOneBatch(batch, 3);
+  }
 
-    //   statement.executeBatch();
-
-    //   return new Status(true);
-    // } catch (Exception e) {
-    //   return new Status(false, 0, e, e.toString());
-    // }
-
-    // modified implementation based on postgresql implementation
+  private Status insertOneBatch(Batch batch, int retryCount) {
     try (Statement statement = connection.createStatement()) {
+      // timescale approche
+      // for (Record record : batch.getRecords()) {
+      //   String sql =
+      //       getInsertOneBatchSql(
+      //           batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
+      //   statement.addBatch(sql);
+      // }
+
+      // statement.executeBatch();
+
+      // test1: batch insert
+      // https://stackoverflow.com/questions/3784197/efficient-way-to-do-batch-inserts-with-jdbc
+      // boolean first = true;
+      // StringBuilder builder = new StringBuilder();
+      // DeviceSchema deviceSchema = batch.getDeviceSchema();
+      // builder.append("insert into ").append(tableName).append("(time, sGroup, device");
+      // List<Sensor> sensors = deviceSchema.getSensors();
+      // for (Sensor sensor : sensors) {
+      //   builder.append(",").append(sensor.getName());
+      // }
+      // builder.append(") values(");
+      // for (Record record : batch.getRecords()) {
+      //   if (!first) {
+      //     builder.append("),(");
+      //   } else {
+      //     first = false;
+      //   }
+      //   builder.append(record.getTimestamp());
+      //   builder.append(",'").append(deviceSchema.getGroup()).append("'");
+      //   builder.append(",'").append(deviceSchema.getDevice()).append("'");
+      //   for (Object value : record.getRecordDataValue()) {
+      //     builder.append(",'").append(convertValue(value)).append("'");
+      //   }
+      // }
+      // builder.append(")");
+      // if (!config.isIS_QUIET_MODE()) {
+      //   LOGGER.debug("getInsertOneBatchSql: {}", builder);
+      // }
+      // statement.execute(builder.toString());
+
+      // test2: prepared statements (Result: Java heap space EXCEPTION with 2000 Devices)
+      // StringBuilder builder = new StringBuilder();
+      // DeviceSchema deviceSchema = batch.getDeviceSchema();
+      // builder.append("insert into ").append(tableName).append("(time, sGroup, device");
+      // List<Sensor> sensors = deviceSchema.getSensors();
+      // for (Sensor sensor : sensors) {
+      //   builder.append(",").append(sensor.getName());
+      // }
+      // builder.append(") values (?, ?, ?");
+      // for (int i = 0; i < sensors.size(); i++) {
+      //   builder.append(", ?");
+      // }
+      // builder.append(")");
+      // PreparedStatement ps = connection.prepareStatement(builder.toString());
+      // for (Record record : batch.getRecords()) {
+      //   ps.setLong(1, record.getTimestamp());
+      //   ps.setString(2, deviceSchema.getGroup());
+      //   ps.setString(3, deviceSchema.getDevice());
+      //   int valueIndex = 0;
+      //   for (Object value : record.getRecordDataValue()) {
+      //     ps.setObject(4 + valueIndex, convertValue(value));
+      //     valueIndex++;
+      //   }
+      //   ps.addBatch();
+      // }
+      // ps.executeBatch();
+
+      // test 3: de-duplication with ON DUPLICATE KEY UPDATE
       boolean first = true;
       StringBuilder builder = new StringBuilder();
       DeviceSchema deviceSchema = batch.getDeviceSchema();
+      builder.append("insert into ").append(tableName).append("(time, sGroup, device");
       List<Sensor> sensors = deviceSchema.getSensors();
 
       Map<Long, Record> uniqueTimestampRecords = new HashMap<>();
       batch.getRecords().stream().forEach(r -> uniqueTimestampRecords.put(r.getTimestamp(), r));
 
-      builder.append("insert into ").append(tableName).append("(time, sGroup, device");
       for (Sensor sensor : sensors) {
         builder.append(",").append(sensor.getName());
       }
@@ -171,31 +225,41 @@ public class TimescaleDB implements IDatabase {
         builder.append(",'").append(deviceSchema.getGroup()).append("'");
         builder.append(",'").append(deviceSchema.getDevice()).append("'");
         for (Object value : record.getRecordDataValue()) {
-          builder.append(",'").append(value).append("'");
+          builder.append(",'").append(convertValue(value)).append("'");
         }
       }
-      builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+      builder.append(") ON DUPLICATE KEY UPDATE ");
       builder
           .append(sensors.get(0).getName())
-          .append("=excluded.")
-          .append(sensors.get(0).getName());
+          .append("=VALUES(")
+          .append(sensors.get(0).getName())
+          .append(")");
       for (int i = 1; i < sensors.size(); i++) {
         builder
             .append(",")
             .append(sensors.get(i).getName())
-            .append("=excluded.")
-            .append(sensors.get(i).getName());
+            .append("=VALUES(")
+            .append(sensors.get(i).getName())
+            .append(")");
       }
       if (!config.isIS_QUIET_MODE()) {
         LOGGER.debug("getInsertOneBatchSql: {}", builder);
       }
       statement.execute(builder.toString());
+
       return new Status(true);
+    } catch (MySQLTransactionRollbackException e) {
+      if (retryCount > 0) {
+        return insertOneBatch(batch, retryCount - 1);
+      } else {
+        return new Status(false, 0, e, e.toString());
+      }
     } catch (Exception e) {
       return new Status(false, 0, e, e.toString());
     }
   }
 
+  // unused
   @Override
   public Status insertOneSensorBatch(Batch batch) {
     try (Statement statement = connection.createStatement()) {
@@ -432,7 +496,7 @@ public class TimescaleDB implements IDatabase {
     StringBuilder sql = getSampleQuerySqlHead(deviceSchemas);
     sql.append(" ORDER BY time DESC");
     if (!config.isIS_QUIET_MODE()) {
-      LOGGER.info("TimescaleDB:" + sql);
+      LOGGER.info("MySQL:" + sql);
     }
     Statement statement = connection.createStatement();
     ResultSet resultSet = statement.executeQuery(sql.toString());
@@ -493,6 +557,7 @@ public class TimescaleDB implements IDatabase {
     return builder;
   }
 
+  // TODO: modify/adapt
   /**
    * 创建查询语句--(带有GroupBy函数的查询) . SELECT time_bucket(5, time) AS sampleTime, device, avg(cpu) FROM
    * metrics WHERE (device='d_1' OR device='d_2').
@@ -502,11 +567,11 @@ public class TimescaleDB implements IDatabase {
     StringBuilder builder = new StringBuilder();
 
     builder
-        .append("SELECT time_bucket(")
+        .append("SELECT CAST((time / ")
         .append(timeUnit)
-        .append(", time, ")
-        .append(offset)
-        .append(") AS sampleTime");
+        .append(") as signed) * ")
+        .append(timeUnit)
+        .append(" AS sampleTime");
 
     addFunSensor(aggFun, builder, devices.get(0).getSensors());
 
@@ -589,14 +654,17 @@ public class TimescaleDB implements IDatabase {
   /**
    * -- Creating a regular SQL table example.
    *
-   * <p>CREATE TABLE group_0 (time BIGINT NOT NULL, sGroup TEXT NOT NULL, device TEXT NOT NULL, s_0
-   * DOUBLE PRECISION NULL, s_1 DOUBLE PRECISION NULL);
+   * <p>CREATE TABLE group_0 (time BIGINT NOT NULL, sGroup VARCHAR(50) NOT NULL, device VARCHAR(50)
+   * NOT NULL, s_0 DOUBLE PRECISION NULL, s_1 DOUBLE PRECISION NULL,UNIQUE (time, sGroup, device));
+   * ;
    *
    * @return create table SQL String
    */
   private String getCreateTableSql(String tableName, List<Sensor> sensors) {
     StringBuilder sqlBuilder = new StringBuilder("CREATE TABLE ").append(tableName).append(" (");
-    sqlBuilder.append("time BIGINT NOT NULL, sGroup TEXT NOT NULL, device TEXT NOT NULL");
+    sqlBuilder.append(
+        // "time BIGINT NOT NULL, sGroup VARCHAR(50) NOT NULL, device VARCHAR(50) NOT NULL");
+        "time BIGINT NOT NULL, sGroup VARCHAR(50), device VARCHAR(50)");
     for (int i = 0; i < sensors.size(); i++) {
       sqlBuilder
           .append(", ")
@@ -606,6 +674,8 @@ public class TimescaleDB implements IDatabase {
           .append(" NULL ");
     }
     sqlBuilder.append(",UNIQUE (time, sGroup, device));");
+    // sqlBuilder.append(",INDEX (time, sGroup, device));");
+    // sqlBuilder.append(");");
     return sqlBuilder.toString();
   }
 
@@ -628,17 +698,19 @@ public class TimescaleDB implements IDatabase {
     builder.append(",'").append(deviceSchema.getGroup()).append("'");
     builder.append(",'").append(deviceSchema.getDevice()).append("'");
     for (Object value : values) {
-      builder.append(",'").append(value).append("'");
+      builder.append(",'").append(convertValue(value)).append("'");
+      // builder.append(",'").append(value).append("'");
     }
-    builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
-    builder.append(sensors.get(0).getName()).append("=excluded.").append(sensors.get(0).getName());
-    for (int i = 1; i < sensors.size(); i++) {
-      builder
-          .append(",")
-          .append(sensors.get(i).getName())
-          .append("=excluded.")
-          .append(sensors.get(i).getName());
-    }
+    // builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+    // builder.append(sensors.get(0).getName()).append("=excluded.").append(sensors.get(0).getName());
+    // for (int i = 1; i < sensors.size(); i++) {
+    //   builder
+    //       .append(",")
+    //       .append(sensors.get(i).getName())
+    //       .append("=excluded.")
+    //       .append(sensors.get(i).getName());
+    // }
+    builder.append(")");
     if (!config.isIS_QUIET_MODE()) {
       LOGGER.debug("getInsertOneBatchSql: {}", builder);
     }
@@ -663,16 +735,27 @@ public class TimescaleDB implements IDatabase {
     builder.append(timestamp);
     builder.append(",'").append(deviceSchema.getGroup()).append("'");
     builder.append(",'").append(deviceSchema.getDevice()).append("'");
-    builder.append(",'").append(value).append("'");
-    builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
-    builder
-        .append(deviceSchema.getSensors().get(0))
-        .append("=excluded.")
-        .append(deviceSchema.getSensors().get(0));
+    builder.append(",'").append(convertValue(value)).append("'");
+    // builder.append(",'").append(value).append("'");
+    // builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+    // builder
+    //     .append(deviceSchema.getSensors().get(0))
+    //     .append("=excluded.")
+    //     .append(deviceSchema.getSensors().get(0));
+    builder.append(")");
     if (!config.isIS_QUIET_MODE()) {
       LOGGER.debug("getInsertOneBatchSql: {}", builder);
     }
     return builder.toString();
+  }
+
+  private Object convertValue(Object value) {
+    if (value.toString().equals("true")) {
+      return 1;
+    } else if (value.toString().equals("false")) {
+      return 0;
+    }
+    return value;
   }
 
   @Override

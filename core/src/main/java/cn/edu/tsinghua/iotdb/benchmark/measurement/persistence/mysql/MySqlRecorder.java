@@ -280,6 +280,8 @@ public class MySqlRecorder extends TestDataPersistence {
         case IoTDB:
         case TimescaleDB:
         case PIArchive:
+        case MySQL:
+        case PostgreSQL:
           sql =
               String.format(
                   SAVE_CONFIG,

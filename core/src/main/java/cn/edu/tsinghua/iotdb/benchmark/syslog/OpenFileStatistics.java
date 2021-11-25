@@ -70,7 +70,11 @@ public class OpenFileStatistics {
         filter = "kairosdb";
         break;
       case TimescaleDB:
+      case PostgreSQL:
         filter = "postgresql";
+        break;
+      case MySQL:
+        filter = "mysql";
         break;
     }
     try {
@@ -130,7 +134,11 @@ public class OpenFileStatistics {
         filter = "kairosdb";
         break;
       case TimescaleDB:
+      case PostgreSQL:
         filter = "postgresql";
+        break;
+      case MySQL:
+        filter = "mysql";
         break;
       default:
         throw new SQLException("unsupported db name :" + config.getDbConfig().getDB_SWITCH());

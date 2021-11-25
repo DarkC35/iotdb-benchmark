@@ -116,6 +116,12 @@ public class DBFactory {
         case DB_PIARCHIVE:
           dbClass = Constants.PI_ARCHIVE_CLASS;
           break;
+        case DB_MYSQL:
+          dbClass = Constants.MYSQL_CLASS;
+          break;
+        case DB_POSTGRESQL:
+          dbClass = Constants.POSTGRESQL_CLASS;
+          break;
         default:
           throw new SQLException("didn't support this database");
       }
