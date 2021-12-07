@@ -54,7 +54,7 @@ public class MySQL implements IDatabase {
   // chunk_time_interval=7d
   // private static final String CONVERT_TO_HYPERTABLE =
   //     "SELECT create_hypertable('%s', 'time', chunk_time_interval => 604800000);";
-  private static final String dropTable = "DROP TABLE %s;";
+  private static final String dropTable = "DROP TABLE IF EXISTS %s;";
 
   private static String tableName;
   private Connection connection;
