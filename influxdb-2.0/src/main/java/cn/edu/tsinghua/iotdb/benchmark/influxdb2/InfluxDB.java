@@ -60,14 +60,13 @@ public class InfluxDB implements IDatabase {
   private InfluxDBClient client;
   private WritePrecision writePrecision;
 
-
   /** constructor. */
   public InfluxDB(DBConfig dbConfig) {
     influxUrl = "http://" + dbConfig.getHOST().get(0) + ":" + dbConfig.getPORT().get(0);
     influxDbName = dbConfig.getDB_NAME();
     token = dbConfig.getTOKEN();
     org = dbConfig.getDB_NAME();
-    switch(config.getTIMESTAMP_PRECISION().toLowerCase()) {
+    switch (config.getTIMESTAMP_PRECISION().toLowerCase()) {
       case "ms":
         writePrecision = WritePrecision.MS;
         break;
