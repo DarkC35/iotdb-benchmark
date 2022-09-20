@@ -1469,6 +1469,7 @@ public class Config {
     properties.put("QUERY_SLIMIT_N", this.QUERY_SLIMIT_N);
     properties.put("QUERY_SLIMIT_OFFSET", this.QUERY_SLIMIT_OFFSET);
     properties.put("WORKLOAD_BUFFER_SIZE", this.WORKLOAD_BUFFER_SIZE);
+    properties.put("GROUP_BY_TIME_UNIT", this.GROUP_BY_TIME_UNIT);
     return properties;
   }
 }
