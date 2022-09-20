@@ -32,8 +32,10 @@ import cn.edu.tsinghua.iotdb.benchmark.tsdb.IDatabase;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.TsdbException;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.*;
 import com.influxdb.client.InfluxDBClientFactory;
+import com.influxdb.client.WriteApiBlocking;
 import com.influxdb.client.domain.Bucket;
 import com.influxdb.client.domain.Organization;
+import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.query.FluxRecord;
 import com.influxdb.query.FluxTable;
 import org.slf4j.Logger;
@@ -56,6 +58,7 @@ public class InfluxDB implements IDatabase {
   private String influxUrl;
   private String influxDbName;
   private com.influxdb.client.InfluxDBClient client;
+  private WritePrecision writePrecision;
 
   /** constructor. */
   public InfluxDB(DBConfig dbConfig) {
@@ -70,6 +73,20 @@ public class InfluxDB implements IDatabase {
             org,
             influxDbName,
             config.getTIMESTAMP_PRECISION());
+    switch (config.getTIMESTAMP_PRECISION().toLowerCase()) {
+      case "ns":
+        writePrecision = WritePrecision.NS;
+        break;
+      case "us":
+        writePrecision = WritePrecision.US;
+        break;
+      case "s":
+        writePrecision = WritePrecision.S;
+        break;
+      case "ms":
+        writePrecision = WritePrecision.MS;
+        break;
+    }
   }
 
   @Override
@@ -138,13 +155,16 @@ public class InfluxDB implements IDatabase {
   @Override
   public Status insertOneBatch(Batch batch) {
     try {
+      WriteApiBlocking writeApi = client.getWriteApiBlocking();
       LinkedList<InfluxDBModel> influxDBModels = createDataModelByBatch(batch);
       List<String> lines = new ArrayList<>();
       for (InfluxDBModel influxDBModel : influxDBModels) {
         lines.add(model2write(influxDBModel));
       }
-      HttpRequestUtil.sendPost(
-          CREATE_URL, String.join("\n", lines), "text/plain; version=0.0.4; charset=utf-8", token);
+      // HttpRequestUtil.sendPost(
+      //     CREATE_URL, String.join("\n", lines), "text/plain; version=0.0.4; charset=utf-8",
+      // token);
+      writeApi.writeRecords(writePrecision, lines);
       return new Status(true);
     } catch (Exception e) {
       return new Status(false, 0, e, e.getMessage());

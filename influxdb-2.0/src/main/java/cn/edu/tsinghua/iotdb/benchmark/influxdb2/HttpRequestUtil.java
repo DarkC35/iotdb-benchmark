@@ -69,7 +69,7 @@ public class HttpRequestUtil {
       URLConnection connection = realUrl.openConnection();
       // setup property of connection
       connection.setRequestProperty("accept", "*/*");
-      connection.setRequestProperty("connection", "Keep-Alive");
+      // connection.setRequestProperty("connection", "Keep-Alive");
       connection.setRequestProperty(
           "user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1;SV1)");
       connection.setRequestProperty("Content-Type", contentType);
