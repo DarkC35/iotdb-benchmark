@@ -82,58 +82,63 @@ public class CSVRecorder extends TestDataPersistence {
   private static final String FOUR = ",%s,%s,%s\n";
 
   public CSVRecorder() {
-    try {
-      InetAddress localhost = InetAddress.getLocalHost();
-      localName = localhost.getHostName();
-    } catch (UnknownHostException e) {
-      localName = "localName";
-      LOGGER.error("Failed to get host name;UnknownHostException：{}", e.getMessage(), e);
-    }
-    localName = localName.replace("-", "_");
-    localName = localName.replace(".", "_");
-    Date date = new Date(EXP_TIME);
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd");
-    String day = dateFormat.format(date);
-    confDir = System.getProperty(Constants.BENCHMARK_CONF);
-    dataDir = confDir.substring(0, confDir.length() - 23) + "/data";
-    csvDir = dataDir + "/csv";
-    File dataFile = new File(dataDir);
-    File csvFile = new File(csvDir);
-    if (!dataFile.exists()) {
-      if (!dataFile.mkdir()) {
-        LOGGER.error("can't create dir");
-      }
-    }
-    if (!csvFile.exists()) {
-      if (!csvFile.mkdir()) {
-        LOGGER.error("can't create dir");
-      }
-    }
-    try {
-      if (config.getBENCHMARK_WORK_MODE() != BenchmarkMode.SERVER) {
-        if (!isRecord.get()) {
-          confWriter = new FileWriter(csvDir + "/" + projectID + "_CONF.csv", true);
-        }
-        finalResultWriter = new FileWriter(csvDir + "/" + projectID + "_FINAL_RESULT.csv", true);
-        projectWriter = new FileWriter(csvDir + "/" + projectID + "_DETAIL.csv", true);
-      } else {
-        serverInfoWriter =
-            new FileWriter(csvDir + "/SERVER_MODE_" + localName + "_" + day + ".csv", true);
-      }
-      initCSVFile();
-    } catch (IOException e) {
-      LOGGER.error("Failed to init csv", e);
+    if (projectWriter == null
+        && serverInfoWriter == null
+        && confWriter == null
+        && finalResultWriter == null) {
       try {
-        if (confWriter != null) {
-          confWriter.close();
+        InetAddress localhost = InetAddress.getLocalHost();
+        localName = localhost.getHostName();
+      } catch (UnknownHostException e) {
+        localName = "localName";
+        LOGGER.error("Failed to get host name;UnknownHostException：{}", e.getMessage(), e);
+      }
+      localName = localName.replace("-", "_");
+      localName = localName.replace(".", "_");
+      Date date = new Date(EXP_TIME);
+      SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd");
+      String day = dateFormat.format(date);
+      confDir = System.getProperty(Constants.BENCHMARK_CONF);
+      dataDir = confDir.substring(0, confDir.length() - 23) + "/data";
+      csvDir = dataDir + "/csv";
+      File dataFile = new File(dataDir);
+      File csvFile = new File(csvDir);
+      if (!dataFile.exists()) {
+        if (!dataFile.mkdir()) {
+          LOGGER.error("can't create dir");
         }
-        finalResultWriter.close();
-        projectWriter.close();
-        if (serverInfoWriter != null) {
-          serverInfoWriter.close();
+      }
+      if (!csvFile.exists()) {
+        if (!csvFile.mkdir()) {
+          LOGGER.error("can't create dir");
         }
-      } catch (IOException ioException) {
-        LOGGER.error("", ioException);
+      }
+      try {
+        if (config.getBENCHMARK_WORK_MODE() != BenchmarkMode.SERVER) {
+          if (!isRecord.get()) {
+            confWriter = new FileWriter(csvDir + "/" + projectID + "_CONF.csv", true);
+          }
+          finalResultWriter = new FileWriter(csvDir + "/" + projectID + "_FINAL_RESULT.csv", true);
+          projectWriter = new FileWriter(csvDir + "/" + projectID + "_DETAIL.csv", true);
+        } else {
+          serverInfoWriter =
+              new FileWriter(csvDir + "/SERVER_MODE_" + localName + "_" + day + ".csv", true);
+        }
+        initCSVFile();
+      } catch (IOException e) {
+        LOGGER.error("Failed to init csv", e);
+        try {
+          if (confWriter != null) {
+            confWriter.close();
+          }
+          finalResultWriter.close();
+          projectWriter.close();
+          if (serverInfoWriter != null) {
+            serverInfoWriter.close();
+          }
+        } catch (IOException ioException) {
+          LOGGER.error("", ioException);
+        }
       }
     }
   }
