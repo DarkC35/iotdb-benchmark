@@ -32,9 +32,12 @@ import cn.edu.tsinghua.iotdb.benchmark.tsdb.DBConfig;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.IDatabase;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.TsdbException;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.*;
+import org.postgresql.copy.CopyManager;
+import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.StringReader;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -132,64 +135,98 @@ public class TimescaleDB implements IDatabase {
   public Status insertOneBatch(Batch batch) {
     // original implementation
     // try (Statement statement = connection.createStatement()) {
-    //   for (Record record : batch.getRecords()) {
-    //     String sql =
-    //         getInsertOneBatchSql(
-    //             batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
-    //     statement.addBatch(sql);
-    //   }
+    // for (Record record : batch.getRecords()) {
+    // String sql =
+    // getInsertOneBatchSql(
+    // batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
+    // statement.addBatch(sql);
+    // }
 
-    //   statement.executeBatch();
+    // statement.executeBatch();
 
-    //   return new Status(true);
+    // return new Status(true);
     // } catch (Exception e) {
-    //   return new Status(false, 0, e, e.toString());
+    // return new Status(false, 0, e, e.toString());
     // }
 
     // modified implementation based on postgresql implementation
-    try (Statement statement = connection.createStatement()) {
-      boolean first = true;
-      StringBuilder builder = new StringBuilder();
+    // try (Statement statement = connection.createStatement()) {
+    // boolean first = true;
+    // StringBuilder builder = new StringBuilder();
+    // DeviceSchema deviceSchema = batch.getDeviceSchema();
+    // List<Sensor> sensors = deviceSchema.getSensors();
+
+    // Map<Long, Record> uniqueTimestampRecords = new HashMap<>();
+    // batch.getRecords().stream().forEach(r ->
+    // uniqueTimestampRecords.put(r.getTimestamp(), r));
+
+    // builder.append("insert into ").append(tableName).append("(time, sGroup,
+    // device");
+    // for (Sensor sensor : sensors) {
+    // builder.append(",").append(sensor.getName());
+    // }
+    // builder.append(") values(");
+    // for (Record record : uniqueTimestampRecords.values()) {
+    // if (!first) {
+    // builder.append("),(");
+    // } else {
+    // first = false;
+    // }
+    // builder.append(record.getTimestamp());
+    // builder.append(",'").append(deviceSchema.getGroup()).append("'");
+    // builder.append(",'").append(deviceSchema.getDevice()).append("'");
+    // for (Object value : record.getRecordDataValue()) {
+    // builder.append(",'").append(value).append("'");
+    // }
+    // }
+    // builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+    // builder
+    // .append(sensors.get(0).getName())
+    // .append("=excluded.")
+    // .append(sensors.get(0).getName());
+    // for (int i = 1; i < sensors.size(); i++) {
+    // builder
+    // .append(",")
+    // .append(sensors.get(i).getName())
+    // .append("=excluded.")
+    // .append(sensors.get(i).getName());
+    // }
+    // if (!config.isIS_QUIET_MODE()) {
+    // LOGGER.debug("getInsertOneBatchSql: {}", builder);
+    // }
+    // statement.execute(builder.toString());
+    // return new Status(true);
+    // } catch (Exception e) {
+    // return new Status(false, 0, e, e.toString());
+    // }
+
+    // TODO: try copy statement instead of multi-row insert
+    // https://www.postgresql.org/docs/current/sql-copy.html
+
+    try {
       DeviceSchema deviceSchema = batch.getDeviceSchema();
       List<Sensor> sensors = deviceSchema.getSensors();
+      StringBuilder builder = new StringBuilder();
 
-      Map<Long, Record> uniqueTimestampRecords = new HashMap<>();
-      batch.getRecords().stream().forEach(r -> uniqueTimestampRecords.put(r.getTimestamp(), r));
+      CopyManager copyManager = new CopyManager((BaseConnection) connection);
 
-      builder.append("insert into ").append(tableName).append("(time, sGroup, device");
+      builder.append("time,sGroup,device");
       for (Sensor sensor : sensors) {
         builder.append(",").append(sensor.getName());
       }
-      builder.append(") values(");
-      for (Record record : uniqueTimestampRecords.values()) {
-        if (!first) {
-          builder.append("),(");
-        } else {
-          first = false;
-        }
+      builder.append("\n");
+      for (Record record : batch.getRecords()) {
         builder.append(record.getTimestamp());
-        builder.append(",'").append(deviceSchema.getGroup()).append("'");
-        builder.append(",'").append(deviceSchema.getDevice()).append("'");
+        builder.append(",").append(deviceSchema.getGroup());
+        builder.append(",").append(deviceSchema.getDevice());
         for (Object value : record.getRecordDataValue()) {
-          builder.append(",'").append(value).append("'");
+          builder.append(",").append(value);
         }
+        builder.append("\n");
       }
-      builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
-      builder
-          .append(sensors.get(0).getName())
-          .append("=excluded.")
-          .append(sensors.get(0).getName());
-      for (int i = 1; i < sensors.size(); i++) {
-        builder
-            .append(",")
-            .append(sensors.get(i).getName())
-            .append("=excluded.")
-            .append(sensors.get(i).getName());
-      }
-      if (!config.isIS_QUIET_MODE()) {
-        LOGGER.debug("getInsertOneBatchSql: {}", builder);
-      }
-      statement.execute(builder.toString());
+      copyManager.copyIn(
+          String.format("COPY %s FROM STDIN WITH (FORMAT csv, DELIMITER ',', HEADER)", tableName),
+          new StringReader(builder.toString()));
       return new Status(true);
     } catch (Exception e) {
       return new Status(false, 0, e, e.toString());
