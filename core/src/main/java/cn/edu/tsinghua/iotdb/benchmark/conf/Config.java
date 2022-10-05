@@ -1743,6 +1743,7 @@ public class Config {
     if (hasQuery()) {
       configProperties.addProperty("Extern Param", "QUERY_AGGREGATE_FUN", this.QUERY_AGGREGATE_FUN);
       configProperties.addProperty("Extern Param", "QUERY_LOWER_VALUE", this.QUERY_LOWER_VALUE);
+      configProperties.addProperty("Extern Param", "GROUP_BY_TIME_UNIT", this.GROUP_BY_TIME_UNIT);
       configProperties.addProperty("Extern Param", "QUERY_SEED", this.QUERY_SEED);
       configProperties.addProperty("Extern Param", "IOTDB_USE_DEBUG", this.IOTDB_USE_DEBUG);
       configProperties.addProperty(
