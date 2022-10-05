@@ -101,7 +101,22 @@ public class DBFactory {
           dbClass = Constants.OPENTSDB_CLASS;
           break;
         case DB_TIMESCALE:
+        case DB_TIMESCALE_12_SINGLE_ROW_INSERT:
+        case DB_TIMESCALE_12_MULTI_ROW_INSERT:
+        case DB_TIMESCALE_12_COPY_INSERT:
+        case DB_TIMESCALE_14_SINGLE_ROW_INSERT:
+        case DB_TIMESCALE_14_MULTI_ROW_INSERT:
+        case DB_TIMESCALE_14_COPY_INSERT:
           dbClass = Constants.TIMESCALEDB_CLASS;
+          break;
+        case DB_POSTGRESQL:
+        case DB_POSTGRESQL_12_SINGLE_ROW_INSERT:
+        case DB_POSTGRESQL_12_MULTI_ROW_INSERT:
+        case DB_POSTGRESQL_12_COPY_INSERT:
+        case DB_POSTGRESQL_14_SINGLE_ROW_INSERT:
+        case DB_POSTGRESQL_14_MULTI_ROW_INSERT:
+        case DB_POSTGRESQL_14_COPY_INSERT:
+          dbClass = Constants.POSTGRESQL_CLASS;
           break;
         case DB_TDENGINE:
           dbClass = Constants.TDENGINE_CLASS;

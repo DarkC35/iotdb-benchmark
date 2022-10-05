@@ -69,6 +69,7 @@ public class OpenFileStatistics {
         filter = "kairosdb";
         break;
       case TimescaleDB:
+      case PostgreSQL:
         filter = "postgresql";
         break;
     }

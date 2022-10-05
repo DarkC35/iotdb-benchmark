@@ -51,6 +51,31 @@ public enum DBSwitch {
   DB_CTS(DBType.CTSDB, null, null),
   DB_KAIROS(DBType.KairosDB, null, null),
   DB_TIMESCALE(DBType.TimescaleDB, null, null),
+  DB_TIMESCALE_12_SINGLE_ROW_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_SINGLE_ROW),
+  DB_TIMESCALE_12_MULTI_ROW_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_MULTI_ROW),
+  DB_TIMESCALE_12_COPY_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_COPY),
+  DB_TIMESCALE_14_SINGLE_ROW_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_SINGLE_ROW),
+  DB_TIMESCALE_14_MULTI_ROW_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_MULTI_ROW),
+  DB_TIMESCALE_14_COPY_INSERT(
+      DBType.TimescaleDB, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_COPY),
+  DB_POSTGRESQL(DBType.PostgreSQL, null, null),
+  DB_POSTGRESQL_12_SINGLE_ROW_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_SINGLE_ROW),
+  DB_POSTGRESQL_12_MULTI_ROW_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_MULTI_ROW),
+  DB_POSTGRESQL_12_COPY_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_12, DBInsertMode.INSERT_USE_SQL_COPY),
+  DB_POSTGRESQL_14_SINGLE_ROW_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_SINGLE_ROW),
+  DB_POSTGRESQL_14_MULTI_ROW_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_MULTI_ROW),
+  DB_POSTGRESQL_14_COPY_INSERT(
+      DBType.PostgreSQL, DBVersion.PostgreSQL_14, DBInsertMode.INSERT_USE_SQL_COPY),
   DB_FAKE(DBType.FakeDB, null, null),
   DB_TDENGINE(DBType.TDengine, null, null),
   DB_QUESTDB(DBType.QuestDB, null, null),

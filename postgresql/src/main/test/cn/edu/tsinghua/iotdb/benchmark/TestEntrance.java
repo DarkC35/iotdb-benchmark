@@ -17,26 +17,12 @@
  * under the License.
  */
 
-package cn.edu.tsinghua.iotdb.benchmark.tsdb.enums;
+package cn.edu.tsinghua.iotdb.benchmark;
 
-public enum DBVersion {
-  IOTDB_013("013"),
-  IOTDB_012("012"),
-  IOTDB_011("011"),
-  IOTDB_010("010"),
-  IOTDB_09("09"),
-  InfluxDB_2("2"),
-  PostgreSQL_12("12"),
-  PostgreSQL_14("14");
+import java.sql.SQLException;
 
-  String version;
-
-  DBVersion(String version) {
-    this.version = version;
-  }
-
-  @Override
-  public String toString() {
-    return version;
-  }
+public class TestEntrance {
+    public static void main(String[] args) throws SQLException {
+        App.main(args);
+    }
 }

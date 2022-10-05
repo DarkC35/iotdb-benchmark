@@ -27,6 +27,8 @@ public enum DBType {
   CTSDB("CTSDB"),
   KairosDB("KairosDB"),
   TimescaleDB("TimescaleDB"),
+  PostgreSQL("PostgreSQL"),
+  MySQL("MySQL"),
   FakeDB("FakeDB"),
   TDengine("TDengine"),
   QuestDB("QuestDB"),

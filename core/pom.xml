@@ -46,10 +46,15 @@
       <artifactId>jmxutils</artifactId>
       <version>1.21</version>
     </dependency>
-    <dependency>
+    <!-- <dependency>
       <groupId>postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <version>9.1-901-1.jdbc4</version>
+    </dependency> -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>42.5.0</version>
     </dependency>
     <dependency>
       <groupId>mysql</groupId>

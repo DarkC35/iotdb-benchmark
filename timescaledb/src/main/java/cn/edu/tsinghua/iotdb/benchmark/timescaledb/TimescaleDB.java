@@ -32,6 +32,7 @@ import cn.edu.tsinghua.iotdb.benchmark.schema.schemaImpl.DeviceSchema;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.DBConfig;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.IDatabase;
 import cn.edu.tsinghua.iotdb.benchmark.tsdb.TsdbException;
+import cn.edu.tsinghua.iotdb.benchmark.tsdb.enums.DBInsertMode;
 import cn.edu.tsinghua.iotdb.benchmark.utils.TimeUtils;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.AggRangeQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.AggRangeValueQuery;
@@ -43,9 +44,12 @@ import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.PreciseQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.RangeQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.ValueRangeQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.VerificationQuery;
+import org.postgresql.copy.CopyManager;
+import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -61,22 +65,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TimescaleDB implements IDatabase {
 
-  private static Config config = ConfigDescriptor.getInstance().getConfig();
-  private static final Logger LOGGER = LoggerFactory.getLogger(TimescaleDB.class);
+  protected static Config config = ConfigDescriptor.getInstance().getConfig();
+  protected static final Logger LOGGER = LoggerFactory.getLogger(TimescaleDB.class);
 
-  private static final String POSTGRESQL_JDBC_NAME = "org.postgresql.Driver";
-  private static final String POSTGRESQL_URL = "jdbc:postgresql://%s:%s/%s";
+  protected static final String POSTGRESQL_JDBC_NAME = "org.postgresql.Driver";
+  protected static final String POSTGRESQL_URL = "jdbc:postgresql://%s:%s/%s";
 
   // chunk_time_interval=7d
   private static final String CONVERT_TO_HYPERTABLE =
       "SELECT create_hypertable('%s', 'time', chunk_time_interval => 604800000);";
-  private static final String dropTable = "DROP TABLE %s;";
-  private static final AtomicBoolean schemaInit = new AtomicBoolean(false);
+  protected static final String dropTable = "DROP TABLE %s;";
+  protected static final AtomicBoolean schemaInit = new AtomicBoolean(false);
   protected static final CyclicBarrier schemaBarrier = new CyclicBarrier(config.getCLIENT_NUMBER());
 
-  private static String tableName;
-  private Connection connection;
-  private DBConfig dbConfig;
+  protected static String tableName;
+  protected Connection connection;
+  protected DBConfig dbConfig;
 
   public TimescaleDB(DBConfig dbConfig) {
     this.dbConfig = dbConfig;
@@ -165,19 +169,105 @@ public class TimescaleDB implements IDatabase {
 
   @Override
   public Status insertOneBatch(Batch batch) {
-    try (Statement statement = connection.createStatement()) {
-      for (Record record : batch.getRecords()) {
-        String sql =
-            getInsertOneBatchSql(
-                batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
-        statement.addBatch(sql);
+
+    if (config.getDbConfig().getDB_SWITCH().getInsertMode()
+        == DBInsertMode.INSERT_USE_SQL_SINGLE_ROW) {
+      try (Statement statement = connection.createStatement()) {
+        for (Record record : batch.getRecords()) {
+          String sql =
+              getInsertOneBatchSql(
+                  batch.getDeviceSchema(), record.getTimestamp(), record.getRecordDataValue());
+          statement.addBatch(sql);
+        }
+
+        statement.executeBatch();
+
+        return new Status(true);
+      } catch (Exception e) {
+        return new Status(false, 0, e, e.toString());
       }
+    } else if (config.getDbConfig().getDB_SWITCH().getInsertMode()
+        == DBInsertMode.INSERT_USE_SQL_MULTI_ROW) {
+      try (Statement statement = connection.createStatement()) {
+        boolean first = true;
+        StringBuilder builder = new StringBuilder();
+        DeviceSchema deviceSchema = batch.getDeviceSchema();
+        List<Sensor> sensors = deviceSchema.getSensors();
 
-      statement.executeBatch();
+        Map<Long, Record> uniqueTimestampRecords = new HashMap<>();
+        batch.getRecords().stream().forEach(r -> uniqueTimestampRecords.put(r.getTimestamp(), r));
 
-      return new Status(true);
-    } catch (Exception e) {
-      return new Status(false, 0, e, e.toString());
+        builder.append("insert into ").append(tableName).append("(time, sGroup, device");
+        for (Sensor sensor : sensors) {
+          builder.append(",").append(sensor.getName());
+        }
+        builder.append(") values(");
+        for (Record record : uniqueTimestampRecords.values()) {
+          if (!first) {
+            builder.append("),(");
+          } else {
+            first = false;
+          }
+          builder.append(record.getTimestamp());
+          builder.append(",'").append(deviceSchema.getGroup()).append("'");
+          builder.append(",'").append(deviceSchema.getDevice()).append("'");
+          for (Object value : record.getRecordDataValue()) {
+            builder.append(",'").append(value).append("'");
+          }
+        }
+        builder.append(") ON CONFLICT(time,sGroup,device) DO UPDATE SET ");
+        builder
+            .append(sensors.get(0).getName())
+            .append("=excluded.")
+            .append(sensors.get(0).getName());
+        for (int i = 1; i < sensors.size(); i++) {
+          builder
+              .append(",")
+              .append(sensors.get(i).getName())
+              .append("=excluded.")
+              .append(sensors.get(i).getName());
+        }
+        if (!config.isIS_QUIET_MODE()) {
+          LOGGER.debug("getInsertOneBatchSql: {}", builder);
+        }
+        statement.execute(builder.toString());
+        return new Status(true);
+      } catch (Exception e) {
+        return new Status(false, 0, e, e.toString());
+      }
+    } else if (config.getDbConfig().getDB_SWITCH().getInsertMode()
+        == DBInsertMode.INSERT_USE_SQL_COPY) {
+      try {
+        DeviceSchema deviceSchema = batch.getDeviceSchema();
+        List<Sensor> sensors = deviceSchema.getSensors();
+        StringBuilder builder = new StringBuilder();
+
+        CopyManager copyManager = new CopyManager((BaseConnection) connection);
+
+        builder.append("time,sGroup,device");
+        for (Sensor sensor : sensors) {
+          builder.append(",").append(sensor.getName());
+        }
+        builder.append("\n");
+        for (Record record : batch.getRecords()) {
+          builder.append(record.getTimestamp());
+          builder.append(",").append(deviceSchema.getGroup());
+          builder.append(",").append(deviceSchema.getDevice());
+          for (Object value : record.getRecordDataValue()) {
+            builder.append(",").append(value);
+          }
+          builder.append("\n");
+        }
+        copyManager.copyIn(
+            String.format("COPY %s FROM STDIN WITH (FORMAT csv, DELIMITER ',', HEADER)", tableName),
+            new StringReader(builder.toString()));
+        return new Status(true);
+      } catch (Exception e) {
+        return new Status(false, 0, e, e.toString());
+      }
+    } else {
+      return new Status(
+          false, 0, new Exception("InsertMode not supported."), "InsertMode not supported.");
     }
   }
 
@@ -445,7 +535,7 @@ public class TimescaleDB implements IDatabase {
     return new DeviceSummary(deviceSchema.getDevice(), totalLineNumber, minTimeStamp, maxTimeStamp);
   }
 
-  private Status executeQueryAndGetStatus(String sql, int sensorNum, Operation operation) {
+  protected Status executeQueryAndGetStatus(String sql, int sensorNum, Operation operation) {
     if (!config.isIS_QUIET_MODE()) {
       LOGGER.debug("{} the query SQL: {}", Thread.currentThread().getName(), sql);
     }
@@ -490,7 +580,7 @@ public class TimescaleDB implements IDatabase {
   /**
    * 创建查询语句--(带有聚合函数的查询) . SELECT device, avg(cpu) FROM metrics WHERE (device='d_1' OR device='d_2')
    */
-  private StringBuilder getAggQuerySqlHead(List<DeviceSchema> devices, String aggFun) {
+  protected StringBuilder getAggQuerySqlHead(List<DeviceSchema> devices, String aggFun) {
     StringBuilder builder = new StringBuilder();
     builder.append("SELECT device");
     addFunSensor(aggFun, builder, devices.get(0).getSensors());
@@ -503,7 +593,7 @@ public class TimescaleDB implements IDatabase {
    * 创建查询语句--(带有GroupBy函数的查询) . SELECT time_bucket(5, time) AS sampleTime, device, avg(cpu) FROM
    * metrics WHERE (device='d_1' OR device='d_2').
    */
-  private StringBuilder getGroupByQuerySqlHead(
+  protected StringBuilder getGroupByQuerySqlHead(
       List<DeviceSchema> devices, String aggFun, long timeUnit, long offset) {
     StringBuilder builder = new StringBuilder();
 
@@ -522,7 +612,7 @@ public class TimescaleDB implements IDatabase {
   }
 
   /** 创建查询语句--(不带有聚合函数的查询) . SELECT time, cpu FROM metrics WHERE (device='d_1' OR device='d_2'). */
-  private StringBuilder getSampleQuerySqlHead(List<DeviceSchema> devices) {
+  protected StringBuilder getSampleQuerySqlHead(List<DeviceSchema> devices) {
     StringBuilder builder = new StringBuilder();
     builder.append("SELECT time");
     addFunSensor(null, builder, devices.get(0).getSensors());
@@ -533,7 +623,7 @@ public class TimescaleDB implements IDatabase {
     return builder;
   }
 
-  private void addFunSensor(String method, StringBuilder builder, List<Sensor> list) {
+  protected void addFunSensor(String method, StringBuilder builder, List<Sensor> list) {
     if (method != null) {
       list.forEach(
           sensor ->
@@ -543,7 +633,7 @@ public class TimescaleDB implements IDatabase {
     }
   }
 
-  private void addDeviceCondition(StringBuilder builder, List<DeviceSchema> devices) {
+  protected void addDeviceCondition(StringBuilder builder, List<DeviceSchema> devices) {
     builder.append(" WHERE (");
     for (DeviceSchema deviceSchema : devices) {
       builder.append("device='").append(deviceSchema.getDevice()).append("'").append(" OR ");
@@ -558,7 +648,7 @@ public class TimescaleDB implements IDatabase {
    * @param builder sql header
    * @param rangeQuery range query
    */
-  private static void addWhereTimeClause(StringBuilder builder, RangeQuery rangeQuery) {
+  protected static void addWhereTimeClause(StringBuilder builder, RangeQuery rangeQuery) {
     builder.append(" AND (time >= ").append(rangeQuery.getStartTimestamp());
     if (rangeQuery instanceof GroupByQuery) {
       builder.append(" and time < ").append(rangeQuery.getEndTimestamp()).append(") ");
@@ -574,7 +664,7 @@ public class TimescaleDB implements IDatabase {
    * @param builder sql header
    * @param valueThreshold lower bound of query value filter
    */
-  private static void addWhereValueClause(
+  protected static void addWhereValueClause(
       List<DeviceSchema> devices, StringBuilder builder, double valueThreshold) {
     boolean first = true;
     for (Sensor sensor : devices.get(0).getSensors()) {
@@ -588,7 +678,7 @@ public class TimescaleDB implements IDatabase {
     builder.append(")");
   }
 
-  private static void addOrderByClause(StringBuilder builder) {
+  protected static void addOrderByClause(StringBuilder builder) {
     builder.append(" ORDER BY time DESC");
   }
 
@@ -600,7 +690,7 @@ public class TimescaleDB implements IDatabase {
    *
    * @return create table SQL String
    */
-  private String getCreateTableSql(String tableName, List<Sensor> sensors) {
+  protected String getCreateTableSql(String tableName, List<Sensor> sensors) {
     StringBuilder sqlBuilder = new StringBuilder("CREATE TABLE ").append(tableName).append(" (");
     sqlBuilder.append("time BIGINT NOT NULL, sGroup TEXT NOT NULL, device TEXT NOT NULL");
     for (Map.Entry<String, String> pair : config.getDEVICE_TAGS().entrySet()) {
@@ -628,7 +718,7 @@ public class TimescaleDB implements IDatabase {
    * <p>INSERT INTO conditions(time, group, device, s_0, s_1) VALUES (1535558400000, 'group_0',
    * 'd_0', 70.0, 50.0);
    */
-  private String getInsertOneBatchSql(
+  protected String getInsertOneBatchSql(
       DeviceSchema deviceSchema, long timestamp, List<Object> values) {
     StringBuilder builder = new StringBuilder();
     List<Sensor> sensors = deviceSchema.getSensors();

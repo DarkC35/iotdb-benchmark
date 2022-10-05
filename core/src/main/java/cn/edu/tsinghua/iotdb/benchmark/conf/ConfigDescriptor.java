@@ -588,7 +588,7 @@ public class ConfigDescriptor {
       if (dbConfig.getDB_SWITCH().getVersion() == null) {
         result = true;
       }
-    } else if (dbConfig.getDB_SWITCH() == DBSwitch.DB_TIMESCALE) {
+    } else if (dbConfig.getDB_SWITCH().getType() == DBType.TimescaleDB) {
       // support timescaledb
       result = true;
     }
