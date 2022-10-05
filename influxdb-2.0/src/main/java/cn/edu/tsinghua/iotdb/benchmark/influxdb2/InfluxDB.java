@@ -39,12 +39,14 @@ import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.LatestPointQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.PreciseQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.RangeQuery;
 import cn.edu.tsinghua.iotdb.benchmark.workload.query.impl.ValueRangeQuery;
+import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
+import com.influxdb.client.WriteApiBlocking;
 import com.influxdb.client.domain.Bucket;
 import com.influxdb.client.domain.Organization;
+import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.query.FluxRecord;
 import com.influxdb.query.FluxTable;
-import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,11 +62,12 @@ public class InfluxDB implements IDatabase {
 
   private final String token;
   private final String org;
-  private String CREATE_URL = "http://%s/api/v2/write?org=%s&bucket=%s&precision=%s";
+  // private String CREATE_URL = "http://%s/api/v2/write?org=%s&bucket=%s&precision=%s";
 
   private String influxUrl;
   private String influxDbName;
-  private com.influxdb.client.InfluxDBClient client;
+  private InfluxDBClient client;
+  private WritePrecision writePrecision;
 
   /** constructor. */
   public InfluxDB(DBConfig dbConfig) {
@@ -72,13 +75,20 @@ public class InfluxDB implements IDatabase {
     influxDbName = dbConfig.getDB_NAME();
     token = dbConfig.getTOKEN();
     org = dbConfig.getDB_NAME();
-    CREATE_URL =
-        String.format(
-            CREATE_URL,
-            dbConfig.getHOST().get(0) + ":" + dbConfig.getPORT().get(0),
-            org,
-            influxDbName,
-            config.getTIMESTAMP_PRECISION());
+    switch (config.getTIMESTAMP_PRECISION().toLowerCase()) {
+      case "ms":
+        writePrecision = WritePrecision.MS;
+        break;
+      case "us":
+        writePrecision = WritePrecision.US;
+        break;
+      case "s":
+        writePrecision = WritePrecision.S;
+        break;
+      case "ns":
+        writePrecision = WritePrecision.NS;
+        break;
+    }
   }
 
   @Override
@@ -145,11 +155,13 @@ public class InfluxDB implements IDatabase {
   @Override
   public Status insertOneBatch(Batch batch) {
     try {
+      WriteApiBlocking writeApi = client.getWriteApiBlocking();
       LinkedList<InfluxDBModel> influxDBModels = createDataModelByBatch(batch);
       List<String> lines = new ArrayList<>();
       for (InfluxDBModel influxDBModel : influxDBModels) {
         lines.add(model2write(influxDBModel));
       }
+      /*
       int responseCode =
           HttpRequestUtil.writeData(
               CREATE_URL,
@@ -161,6 +173,9 @@ public class InfluxDB implements IDatabase {
       } else {
         return new Status(false, 0);
       }
+      */
+      writeApi.writeRecords(writePrecision, lines);
+      return new Status(true);
     } catch (Exception e) {
       return new Status(false, 0, e, e.getMessage());
     }
