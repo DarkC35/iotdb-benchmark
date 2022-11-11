@@ -146,15 +146,15 @@ public class TimescaleDB implements IDatabase {
     start = System.nanoTime();
     if (schemaInit.compareAndSet(false, true)) {
       try (Statement statement = connection.createStatement()) {
-        String pgsql = getCreateTableSql(tableName, schemaList.get(0).getSensors());
-        LOGGER.debug("CreateTableSQL Statement:  {}", pgsql);
-        statement.execute(pgsql);
+        String sql = getCreateTableSql(tableName, schemaList.get(0).getSensors());
+        LOGGER.debug("CreateTableSQL Statement:  {}", sql);
+        statement.execute(sql);
         LOGGER.debug(
             "CONVERT_TO_HYPERTABLE Statement:  {}",
             String.format(CONVERT_TO_HYPERTABLE, tableName));
         statement.execute(String.format(CONVERT_TO_HYPERTABLE, tableName));
       } catch (SQLException e) {
-        LOGGER.error("Can't create PG table because: {}", e.getMessage());
+        LOGGER.error("Can't create TimescaleDB table because: {}", e.getMessage());
         throw new TsdbException(e);
       }
     }
@@ -366,7 +366,8 @@ public class TimescaleDB implements IDatabase {
 
   /**
    * eg. SELECT time_bucket(5000, time) AS sampleTime, device, count(s_2) FROM tutorial WHERE
-   * (device='d_2') AND (time >= 1535558400000 and time <= 1535558650000) GROUP BY time, device.
+   * (device='d_2') AND (time >= 1535558400000 and time <= 1535558650000) GROUP BY sampleTime,
+   * device.
    *
    * @param groupByQuery contains universal group by query condition parameters
    */
