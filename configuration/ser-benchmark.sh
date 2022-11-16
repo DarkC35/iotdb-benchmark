@@ -9,7 +9,7 @@ sed -i "s/^BENCHMARK_WORK_MODE.*$/BENCHMARK_WORK_MODE=serverMODE/g" $BENCHMARK_H
 
 echo '------Server Test Begin Time------'
 date
-$BENCHMARK_HOME/bin/startup.sh -cf $BENCHMARK_HOME/conf/config.properties
+exec $BENCHMARK_HOME/bin/startup.sh -cf $BENCHMARK_HOME/conf/config.properties
 echo '------Server Test Complete Time------'
 date
 
