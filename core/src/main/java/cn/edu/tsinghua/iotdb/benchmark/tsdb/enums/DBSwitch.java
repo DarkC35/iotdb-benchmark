@@ -83,7 +83,12 @@ public enum DBSwitch {
   DB_VICTORIAMETRICS(DBType.VictoriaMetrics, null, null),
   DB_PIARCHIVE(DBType.PIArchive, null, null),
   DB_SQLITE(DBType.SQLite, null, null),
-  DB_IginX(DBType.IginX, null, null);
+  DB_IginX(DBType.IginX, null, null),
+  DB_MYSQL_8_SINGLE_ROW_INSERT(
+      DBType.MySQL, DBVersion.MySQL_8, DBInsertMode.INSERT_USE_SQL_SINGLE_ROW),
+  DB_MYSQL_8_MULTI_ROW_INSERT(
+      DBType.MySQL, DBVersion.MySQL_8, DBInsertMode.INSERT_USE_SQL_MULTI_ROW),
+  DB_MYSQL_8_COPY_INSERT(DBType.MySQL, DBVersion.MySQL_8, DBInsertMode.INSERT_USE_SQL_COPY);
 
   private static final Logger LOGGER = LoggerFactory.getLogger(DBSwitch.class);
   DBType type;

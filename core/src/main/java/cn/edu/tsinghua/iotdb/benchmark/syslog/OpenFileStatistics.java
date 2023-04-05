@@ -72,6 +72,9 @@ public class OpenFileStatistics {
       case PostgreSQL:
         filter = "postgresql";
         break;
+      case MySQL:
+        filter = "mysql";
+        break;
     }
     try {
       String command = String.format(SEARCH_PID, filter);

@@ -27,7 +27,8 @@ public enum DBVersion {
   IOTDB_09("09"),
   InfluxDB_2("2"),
   PostgreSQL_12("12"),
-  PostgreSQL_14("14");
+  PostgreSQL_14("14"),
+  MySQL_8("8");
 
   String version;
 

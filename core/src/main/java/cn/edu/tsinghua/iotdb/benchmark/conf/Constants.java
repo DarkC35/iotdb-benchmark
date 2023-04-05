@@ -92,4 +92,5 @@ public class Constants {
   public static final String PI_ARCHIVE_CLASS =
       "cn.edu.tsinghua.iotdb.benchmark.piarchive.PIArchive";
   public static final String IGINX_CLASS = "cn.edu.tsinghua.iotdb.benchmark.iginx.IginX";
+  public static final String MYSQL_CLASS = "cn.edu.tsinghua.iotdb.benchmark.mysql.MySQL";
 }

@@ -30,6 +30,7 @@
 <!--        <module>pi</module>-->
 <!--        <module>iginx</module>-->
         <module>postgresql</module>
+        <module>mysql</module>
     </modules>
 
     <properties>

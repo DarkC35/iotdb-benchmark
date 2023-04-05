@@ -142,6 +142,11 @@ public class DBFactory {
         case DB_IginX:
           dbClass = Constants.IGINX_CLASS;
           break;
+        case DB_MYSQL_8_SINGLE_ROW_INSERT:
+        case DB_MYSQL_8_MULTI_ROW_INSERT:
+        case DB_MYSQL_8_COPY_INSERT:
+          dbClass = Constants.MYSQL_CLASS;
+          break;
         default:
           throw new SQLException("didn't support this database");
       }
